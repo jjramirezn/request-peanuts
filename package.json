@@ -15,10 +15,12 @@
   "dependencies": {
     "@prisma/client": "^5.19.1",
     "@squirrel-labs/peanut-sdk": "^0.4.63",
+    "cors": "^2.8.5",
     "hyper-express": "^6.16.4",
     "short-uuid": "^5.2.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
     "@types/node": "^22.5.4",
     "prisma": "^5.19.1",
     "typescript": "^5.6.2"

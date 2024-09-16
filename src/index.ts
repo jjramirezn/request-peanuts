@@ -1,6 +1,7 @@
 import HyperExpress from 'hyper-express';
 import peanut from '@squirrel-labs/peanut-sdk'
 import short from 'short-uuid';
+import cors from 'cors';
 import { Request, RequestStatus, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -20,8 +21,13 @@ type RequestBody = {
   amount: string;
 }
 
-const WEB_BASE_URL = process.env['WEB_BASE_URL'] || 'http://localhost:3000';
+const WEB_BASE_URL = process.env['WEB_BASE_URL'] || 'http://localhost:3001';
 const PEANUT_API_KEY = process.env['PEANUT_API_KEY'] || '';
+const PORT = Number(process.env['PORT'] || 3000);
+
+webserver.use(cors({
+  origin: WEB_BASE_URL,
+}));
 
 /**
  * Validates the pay body
@@ -100,8 +106,10 @@ webserver.post('/pay', async (req, res) => {
     payBody = validatePayBody(await req.json());
   } catch (err: unknown) {
     res.status(400).json({error: (err as Error).message});
+    console.error('Error validating pay body', err);
     return;
  }
+ console.log('Received request to pay', payBody);
 
   const request = await prisma.request.findUnique({
     where: {
@@ -111,6 +119,7 @@ webserver.post('/pay', async (req, res) => {
 
   if (!request) {
     res.status(404).json({error: 'Request not found'});
+    console.log('Request not found');
     return;
   }
 
@@ -118,24 +127,34 @@ webserver.post('/pay', async (req, res) => {
 
   if (linkDetails.chainId !== request.chainId) {
     res.status(400).json({error: `Requested chain ${request.chainId} does not match link chain ${linkDetails.chainId}`});
+    console.log('Requested chain does not match link chain');
     return;
   }
 
   if (linkDetails.tokenAddress !== request.tokenAddress) {
     res.status(400).json({error: `Requested token ${request.tokenAddress} does not match link token ${linkDetails.tokenAddress}`});
+    console.log('Requested token does not match link token');
     return;
   }
 
   if (String(linkDetails.tokenAmount) !== request.amount) {
     res.status(400).json({error: `Requested amount ${request.amount} does not match link amount ${linkDetails.tokenAmount}`});
+    console.log('Requested amount does not match link amount');
     return;
   }
 
-  const claimedLinkResponse = await peanut.claimLinkGasless({
-    APIKey: PEANUT_API_KEY,
-    link: payBody.url,
-    recipientAddress: request.address,
-  });
+  let claimedLinkResponse;
+  try {
+     claimedLinkResponse = await peanut.claimLinkGasless({
+      APIKey: PEANUT_API_KEY,
+      link: payBody.url,
+      recipientAddress: request.address,
+    });
+  } catch (err: unknown) {
+    res.status(500).json({error: `Peanut Error claiming link: ${err}`});
+    console.error('Error claiming link', err);
+    return;
+  }
 
   await prisma.request.update({
     where: { id: translator.toUUID(payBody.requestId) },
@@ -143,10 +162,11 @@ webserver.post('/pay', async (req, res) => {
   });
 
   res.status(200).json({txHash: claimedLinkResponse.txHash});
+  console.log('Claimed link', claimedLinkResponse);
 });
 
-webserver.listen(3000).then((_socket) => {
-  console.log(`Server listening on port 3000`);
+webserver.listen(PORT).then((_socket) => {
+  console.log(`Server listening on port ${PORT}`);
 }).catch((err) => {
   console.error(err);
 });
