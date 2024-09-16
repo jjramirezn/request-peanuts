@@ -1,0 +1,44 @@
+services:
+  postgres:
+    container_name: request-db
+    image: postgres:15
+    restart: always
+    environment:
+      DATABASE_HOST: localhost
+      POSTGRES_USER: peanut
+      POSTGRES_PASSWORD: peanut
+      POSTGRES_DB: peanut
+    ports:
+      - 5432:5432
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U peanut" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: ./
+      target: runner
+    ports:
+      - 3000:3000
+    env_file:
+      - ./.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://peanut:peanut@postgres/peanut"
+    depends_on:
+      - postgres
+
+  postgres-migrate:
+    image: node:20-alpine
+    environment:
+      DATABASE_URL: "postgresql://peanut:peanut@postgres/peanut"
+    entrypoint: [ 'sh', '-c', 'cd code && npm install --no-save --quiet prisma@5.2.0 && npx prisma migrate deploy']
+    volumes:
+      - ./prisma:/code/prisma
+    depends_on:
+      postgres:
+        condition: service_healthy
